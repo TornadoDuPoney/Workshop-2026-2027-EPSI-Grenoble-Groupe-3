@@ -19,15 +19,16 @@ import requests
 from sklearn.ensemble import IsolationForest
 import joblib
 
-PROM_URL = "http://localhost:9090"
+import os
+PROM_URL = os.getenv("PROM_URL", "http://localhost:9090")
 CSV = "metrics_normal.csv"
 MODEL = "detector_model.joblib"
 COLS = ["rps", "latency_p95", "error_rate"]
 
 Q = {
-    "rps": 'sum(rate(payments_total[1m]))',
-    "latency_p95": 'histogram_quantile(0.95, sum(rate(payment_latency_seconds_bucket[1m])) by (le))',
-    "error_rate": 'sum(rate(payments_total{status="error"}[1m]))',
+    "rps": 'sum(rate(payments_total[30s]))',
+    "latency_p95": 'histogram_quantile(0.95, sum(rate(payment_latency_seconds_bucket[30s])) by (le))',
+    "error_rate": 'sum(rate(payments_total{status="error"}[30s]))',
 }
 
 

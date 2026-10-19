@@ -32,7 +32,7 @@ services:
     environment:
       PROM_URL: "http://prometheus:9090"
       REMEDIATOR_URL: "http://remediator:8000/alert"
-      MODEL_PATH: "/app/detector_model.joblib"
+      MODEL_PATH: "/models/detector_model.joblib"
     # Monte le modèle entraîné s'il existe (sinon repli par seuils) :
     volumes:
       - ../../ml:/models:ro
