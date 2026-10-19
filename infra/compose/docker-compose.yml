@@ -1,0 +1,82 @@
+# RESILIENCE-ALPHA — orchestration du démonstrateur.
+# Lancer depuis ce dossier :  docker compose up --build
+# Réseaux segmentés : front (exposé via WAF), back (métier), obs (observabilité).
+
+name: resilience
+
+services:
+  api-paiement:
+    build: ../../services/api-paiement
+    container_name: resilience-api-paiement
+    environment:
+      SATURATION_THRESHOLD: "40"
+    networks: [back, obs]
+
+  remediator:
+    build: ../../services/remediator
+    container_name: resilience-remediator
+    environment:
+      API_URL: "http://api-paiement:8000"
+      API_CONTAINER: "resilience-api-paiement"
+      WAF_CONTAINER: "resilience-waf"
+    # Accès au socket Docker = droits élevés : isolé sur le réseau back, pas de port exposé.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../waf/scripts:/scripts:ro
+    networks: [back, obs]
+    depends_on: [api-paiement]
+
+  detector:
+    build: ../../services/detector
+    container_name: resilience-detector
+    environment:
+      PROM_URL: "http://prometheus:9090"
+      REMEDIATOR_URL: "http://remediator:8000/alert"
+      MODEL_PATH: "/app/detector_model.joblib"
+    # Monte le modèle entraîné s'il existe (sinon repli par seuils) :
+    volumes:
+      - ../../ml:/models:ro
+    networks: [back, obs]
+    depends_on: [prometheus, remediator]
+
+  waf:
+    image: owasp/modsecurity-crs:nginx-alpine
+    container_name: resilience-waf
+    environment:
+      BACKEND: "http://api-paiement:8000"
+      SERVER_NAME: "localhost"
+    ports:
+      - "8080:8080"      # SEUL point d'entrée exposé au réseau du groupe
+    volumes:
+      - ../waf/scripts:/scripts
+    networks: [front, back]
+    depends_on: [api-paiement]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: resilience-prometheus
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [obs, back]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: resilience-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"   # changez-le, et pas de secret en clair au rendu
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    networks: [obs]
+    depends_on: [prometheus]
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: resilience-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks: [obs]
+
+networks:
+  front: {}
+  back: {}
+  obs: {}

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.log
+.env
+secrets/*.txt
+node_modules/
+*.joblib
+metrics_normal.csv
+.venv/
+docker-compose.override.yml
