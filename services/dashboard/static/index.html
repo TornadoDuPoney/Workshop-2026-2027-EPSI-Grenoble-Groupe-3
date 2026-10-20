@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RESILIENCE-ALPHA — Supervision</title>
+
+<!-- Tailwind CSS (CDN play) -->
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "#0b1017", panel: "#121a24", panel2: "#0e151d", line: "#223041",
+          fg: "#e8eef4", muted: "#8395a7", accent: "#38b6d6",
+          ok: "#35d07f", okbg: "#0f2a1d", crit: "#ff5c5c", critbg: "#2c1316", warn: "#ffb020",
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+          sans: ['"Inter"', "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  @keyframes pulse-fast { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+  @keyframes pulse-slow { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
+  .pulse-fast { animation: pulse-fast .7s infinite }
+  .pulse-slow { animation: pulse-slow 2s infinite }
+  @media (prefers-reduced-motion: reduce) { .pulse-fast, .pulse-slow { animation: none } }
+  body { background: #0b1017; }
+</style>
+</head>
+<body class="bg-bg text-fg font-sans antialiased">
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect, useRef } = React;
+const h = React.createElement;
+
+function Sparkline({ data, color }) {
+  const W = 300, H = 150, pad = 6;
+  if (!data.length) return h("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-[150px]" });
+  const mx = Math.max(...data, 1);
+  const pts = data.map((v, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (W - 2 * pad);
+    const y = H - pad - (v / mx) * (H - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const area = `${pad},${H - pad} ${pts} ${W - pad},${H - pad}`;
+  return h("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", className: "w-full h-[150px] block" },
+    h("polyline", { points: area, fill: color, opacity: 0.12, stroke: "none" }),
+    h("polyline", { points: pts, fill: "none", stroke: color, strokeWidth: 2, strokeLinejoin: "round" })
+  );
+}
+
+function Kpi({ k, v, u, alert }) {
+  return h("div", { className: "bg-panel border border-line rounded-xl px-4 py-4 min-w-0" },
+    h("div", { className: "font-mono text-[11px] uppercase tracking-[0.08em] text-muted" }, k),
+    h("div", { className: `font-mono text-[32px] font-bold mt-1.5 tabular-nums ${alert ? "text-crit" : "text-fg"}` },
+      v, " ", h("span", { className: "text-sm text-muted font-normal" }, u))
+  );
+}
+
+function App() {
+  const [state, setState] = useState({ rps: 0, latency_p95_ms: 0, error_rate: 0, success_total: 0, error_total: 0, verdict: "idle" });
+  const [services, setServices] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [live, setLive] = useState(false);
+  const histLat = useRef([]), histErr = useRef([]);
+  const [, force] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    async function tick() {
+      try {
+        const [s, sv, inc] = await Promise.all([
+          fetch("api/state").then(r => r.json()),
+          fetch("api/services").then(r => r.json()),
+          fetch("api/incidents").then(r => r.json()),
+        ]);
+        if (!alive) return;
+        setState(s); setServices(sv.services || []); setIncidents(inc.incidents || []);
+        setLive(true);
+        histLat.current = [...histLat.current, s.latency_p95_ms].slice(-40);
+        histErr.current = [...histErr.current, s.error_rate].slice(-40);
+        force(x => x + 1);
+      } catch (e) { setLive(false); }
+    }
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const incident = state.verdict === "incident";
+  const nominal = state.verdict === "nominal";
+  const vLabel = incident ? "INCIDENT" : nominal ? "SERVICE NOMINAL" : "EN ATTENTE";
+  const vSub = incident ? "Anomalie détectée — remédiation automatique en cours"
+             : nominal ? "Toutes les transactions sont traitées normalement"
+             : "Aucun trafic — en attente d'activité";
+  const vBox = incident ? "border-crit bg-critbg" : nominal ? "border-ok bg-okbg" : "border-line bg-panel";
+  const vText = incident ? "text-crit" : nominal ? "text-ok" : "text-fg";
+  const vPulse = incident ? "bg-crit pulse-fast" : nominal ? "bg-ok pulse-slow" : "bg-muted";
+
+  const fmt = t => { try { return new Date(t).toLocaleTimeString("fr-FR"); } catch { return t; } };
+
+  return h("div", { className: "max-w-[1120px] mx-auto px-4 py-5" },
+    // Header
+    h("header", { className: "flex items-center justify-between gap-4 flex-wrap mb-[18px]" },
+      h("div", { className: "flex items-center gap-3" },
+        h("span", { className: `w-2.5 h-2.5 rounded-full ${live ? "bg-ok" : "bg-muted"}`,
+          style: live ? { boxShadow: "0 0 0 4px rgba(53,208,127,0.15)" } : {} }),
+        h("div", null,
+          h("h1", { className: "font-mono text-lg m-0 tracking-[0.04em]" }, "RESILIENCE-ALPHA"),
+          h("div", { className: "font-mono text-[11px] text-muted" }, "Supervision de la plateforme de paiement")
+        )
+      ),
+      h("div", { className: "font-mono text-[11px] text-muted" }, live ? "● flux live" : "○ hors ligne")
+    ),
+
+    // Verdict
+    h("div", { className: `rounded-2xl px-6 py-5 mb-[18px] flex items-center justify-between gap-5 flex-wrap border ${vBox}` },
+      h("div", null,
+        h("div", { className: `font-mono font-bold tracking-[0.02em] text-[clamp(26px,5vw,42px)] ${vText}` }, vLabel),
+        h("div", { className: "font-mono text-[13px] text-muted mt-1" }, vSub)
+      ),
+      h("div", { className: `w-4 h-4 rounded-full ${vPulse}` })
+    ),
+
+    // KPI
+    h("div", { className: "grid gap-3.5 mb-[18px]", style: { gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" } },
+      h(Kpi, { k: "Débit", v: state.rps, u: "req/s" }),
+      h(Kpi, { k: "Latence p95", v: state.latency_p95_ms, u: "ms", alert: state.latency_p95_ms > 300 }),
+      h(Kpi, { k: "Taux d'erreur", v: state.error_rate, u: "err/s", alert: state.error_rate > 0.5 }),
+      h(Kpi, { k: "Transactions OK", v: state.success_total, u: "total" })
+    ),
+
+    // Colonnes
+    h("div", { className: "grid gap-3.5 grid-cols-1 lg:grid-cols-[1.3fr_1fr]" },
+      // Charts
+      h("div", { className: "min-w-0" },
+        h(Card, { title: "Latence p95 (ms) — temps réel" },
+          h(Sparkline, { data: histLat.current, color: "#38b6d6" }),
+          h(Legend, { color: "#38b6d6", label: "latence p95" })
+        ),
+        h("div", { className: "mt-3.5" },
+          h(Card, { title: "Taux d'erreur (err/s) — temps réel" },
+            h(Sparkline, { data: histErr.current, color: "#ff5c5c" }),
+            h(Legend, { color: "#ff5c5c", label: "erreurs/s" })
+          )
+        )
+      ),
+      // Services + timeline
+      h("div", { className: "min-w-0" },
+        h(Card, { title: "État des services" },
+          services.length
+            ? services.map((s, i) =>
+                h("div", { key: i, className: "flex items-center gap-2.5 py-2 border-b border-panel2 last:border-0 font-mono text-sm" },
+                  h("span", { className: `w-2.5 h-2.5 rounded-full ${s.up ? "bg-ok" : "bg-crit"}` }),
+                  h("span", null, s.name),
+                  h("span", { className: "ml-auto text-[11px] text-muted uppercase" }, s.up ? "up" : "down")
+                ))
+            : h("div", { className: "font-mono text-[13px] text-muted py-2.5" }, "en attente des cibles Prometheus…")
+        ),
+        h("div", { className: "mt-3.5" },
+          h(Card, { title: "Timeline de reprise autonome" },
+            h("div", { className: "max-h-[320px] overflow-y-auto" },
+              incidents.length
+                ? incidents.map((inc, i) =>
+                    h("div", { key: i, className: "border-l-2 border-line pl-4 pb-4 ml-1 relative" },
+                      h("span", { className: `absolute -left-[6px] top-0.5 w-2.5 h-2.5 rounded-full ${inc.recovered ? "bg-ok" : "bg-crit"}` }),
+                      h("div", { className: "font-mono text-xs text-muted" },
+                        fmt(inc.detected_at),
+                        h("span", { className: `font-mono text-[11px] px-2 py-0.5 rounded ml-2 ${inc.recovered ? "bg-okbg text-ok" : "bg-critbg text-crit"}` },
+                          inc.recovered ? "RÉTABLI" : "EN COURS")
+                      ),
+                      (inc.steps || []).map((st, j) =>
+                        h("div", { key: j, className: "font-mono text-[12.5px] py-[3px] pl-3.5 relative before:content-['→'] before:absolute before:left-0 before:text-accent" }, st.action)
+                      )
+                    ))
+                : h("div", { className: "font-mono text-[13px] text-muted py-2.5" }, "aucun incident — le système est sain")
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function Card({ title, children }) {
+  return h("div", { className: "bg-panel border border-line rounded-xl px-[18px] py-4 min-w-0" },
+    h("h2", { className: "font-mono text-[13px] uppercase tracking-[0.06em] text-muted mt-0 mb-3.5" }, title),
+    children
+  );
+}
+function Legend({ color, label }) {
+  return h("div", { className: "font-mono text-[11px] text-muted mt-2" },
+    h("span", { className: "inline-block w-2.5 h-[3px] align-middle mr-1.5", style: { background: color } }),
+    label
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>

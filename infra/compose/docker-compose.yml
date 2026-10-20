@@ -76,6 +76,17 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks: [obs]
 
+  dashboard:
+    build: ../../services/dashboard
+    container_name: resilience-dashboard
+    environment:
+      PROM_URL: "http://prometheus:9090"
+      REMEDIATOR_URL: "http://remediator:8000"
+    ports:
+      - "8050:8000"      # interface de supervision : http://localhost:8050
+    networks: [obs, back]
+    depends_on: [prometheus, remediator]
+
 networks:
   front: {}
   back: {}
