@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console RESILIENCE-ALPHA</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: {
+    bg: "#0b1017", panel: "#141e27", line: "#223041", fg: "#e8eef4", muted: "#8395a7",
+    ok: "#35d07f", okbg: "#0f2a1d", crit: "#ff5c5c", critbg: "#2c1316", brand: "#38b6d6",
+  }, fontFamily: {
+    mono: ['"JetBrains Mono"', "ui-monospace", "Menlo", "monospace"],
+    sans: ['"Inter"', "system-ui", "sans-serif"],
+  } } } };
+</script>
+<style> html, body { background: #0b1017; color: #e8eef4; } </style>
+</head>
+<body class="font-sans">
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect } = React;
+const h = React.createElement;
+
+function App() {
+  const [st, setSt] = useState({ attack: false, traffic: false });
+  const [log, setLog] = useState([]);
+
+  async function refresh() {
+    try { setSt(await fetch("api/status").then(r => r.json())); } catch {}
+  }
+  useEffect(() => { refresh(); const id = setInterval(refresh, 2000); return () => clearInterval(id); }, []);
+
+  function note(msg) {
+    const t = new Date().toLocaleTimeString("fr-FR");
+    setLog(l => [`${t}  ${msg}`, ...l].slice(0, 8));
+  }
+  async function call(path, label) {
+    try { const r = await fetch(path, { method: "POST" }).then(r => r.json()); note(r.message || label); refresh(); }
+    catch { note("Erreur : service console injoignable"); }
+  }
+
+  const Btn = ({ onClick, children, tone }) =>
+    h("button", { onClick, className:
+      "rounded-lg px-5 py-3 font-medium text-sm transition w-full " + (
+        tone === "crit" ? "bg-crit text-white hover:brightness-110" :
+        tone === "ok" ? "bg-ok text-[#06240f] hover:brightness-110" :
+        "bg-panel border border-line text-fg hover:border-brand") }, children);
+
+  const Light = ({ on, label }) =>
+    h("div", { className: "flex items-center gap-2 font-mono text-[12px]" },
+      h("span", { className: "w-2.5 h-2.5 rounded-full " + (on ? "bg-crit" : "bg-muted") }),
+      h("span", { className: on ? "text-crit" : "text-muted" }, label));
+
+  return h("div", { className: "max-w-[720px] mx-auto px-4 py-6" },
+    h("header", { className: "flex items-center justify-between flex-wrap gap-3 mb-6" },
+      h("div", null,
+        h("h1", { className: "font-mono text-lg tracking-wide" }, "CONSOLE DE DÉMONSTRATION"),
+        h("div", { className: "text-muted text-[13px]" }, "Pilotage de l'attaque et du trafic — RESILIENCE-ALPHA")
+      ),
+      h("div", { className: "flex gap-4" },
+        h(Light, { on: st.attack, label: st.attack ? "ATTAQUE EN COURS" : "attaque inactive" }),
+        h(Light, { on: st.traffic, label: st.traffic ? "TRAFIC ACTIF" : "trafic inactif" })
+      )
+    ),
+
+    // Trafic normal
+    h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
+      h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "1 · Trafic normal"),
+      h("p", { className: "text-sm text-muted mb-4" }, "Simule l'activité clients. À lancer en premier pour que le service soit « vivant »."),
+      h("div", { className: "grid grid-cols-2 gap-3" },
+        h(Btn, { onClick: () => call("api/traffic/start"), tone: "ok" }, "▶ Démarrer le trafic"),
+        h(Btn, { onClick: () => call("api/traffic/stop") }, "■ Arrêter le trafic")
+      )
+    ),
+
+    // Attaque
+    h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
+      h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "2 · Attaque (déni de service)"),
+      h("p", { className: "text-sm text-muted mb-4" }, "Flood HTTP sur l'API de paiement. Déclenche la détection puis la remédiation automatique."),
+      h("div", { className: "grid grid-cols-2 gap-3" },
+        h(Btn, { onClick: () => call("api/attack/start"), tone: "crit" }, "⚡ Lancer l'attaque"),
+        h(Btn, { onClick: () => call("api/attack/stop") }, "■ Arrêter l'attaque")
+      )
+    ),
+
+    // Test paiement
+    h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
+      h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "3 · Vérifier le service"),
+      h("p", { className: "text-sm text-muted mb-4" }, "Envoie une transaction unique pour vérifier l'état (avant, pendant, après l'incident)."),
+      h(Btn, { onClick: () => call("api/test-payment") }, "✓ Envoyer une transaction de test")
+    ),
+
+    // Journal
+    h("div", { className: "bg-panel border border-line rounded-xl p-5" },
+      h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-3" }, "Journal"),
+      log.length
+        ? h("div", { className: "font-mono text-[12.5px] space-y-1" }, log.map((l, i) => h("div", { key: i, className: "text-fg" }, l)))
+        : h("div", { className: "text-muted text-sm" }, "Les actions s'afficheront ici.")
+    ),
+
+    h("p", { className: "text-center text-[11px] text-muted mt-5" },
+      "Attaque strictement limitée au SI local RESILIENCE-ALPHA.")
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banque RESILIENCE-ALPHA</title>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          ink: "#0f1b2d", slate: "#475569", mist: "#e2e8f0",
+          brand: "#1b5e8f", brand2: "#2a9d8f",
+          ok: "#15803d", okbg: "#dcfce7", ko: "#b91c1c", kobg: "#fee2e2",
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', "ui-monospace", "Menlo", "monospace"],
+          sans: ['"Inter"', "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  /* Thème clair unique : appli bancaire, lisible quel que soit le réglage système. */
+  html, body { background: #f1f5f9; color: #0f1b2d; }
+</style>
+</head>
+<body class="font-sans text-ink">
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect } = React;
+const h = React.createElement;
+
+const BENEF = ["Boulangerie Martin", "EDF", "Loyer SCI Alpha", "Amazon", "Spotify"];
+const euro = n => (n ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+
+function App() {
+  const [acc, setAcc] = useState(null);
+  const [amount, setAmount] = useState("29.90");
+  const [benef, setBenef] = useState(BENEF[0]);
+  const [sending, setSending] = useState(false);
+  const [flash, setFlash] = useState(null);
+  const [offline, setOffline] = useState(false);
+
+  async function load() {
+    try {
+      const a = await fetch("api/account").then(r => r.json());
+      setAcc(a); setOffline(false);
+    } catch { setOffline(true); }
+  }
+  useEffect(() => { load(); const id = setInterval(load, 4000); return () => clearInterval(id); }, []);
+
+  async function pay(e) {
+    e.preventDefault();
+    const amt = parseFloat(amount);
+    if (!(amt > 0)) return;
+    setSending(true); setFlash(null);
+    try {
+      const res = await fetch("api/pay", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amt, beneficiary: benef }),
+      }).then(r => r.json());
+      const t = res.transaction;
+      if (t.status === "réussie") setFlash({ ok: true, text: `Paiement de ${euro(t.amount)} à ${t.beneficiary} validé (réf. ${t.txid}).` });
+      else setFlash({ ok: false, text: `Paiement refusé : ${t.reason || "service indisponible"}. Réessayez.` });
+      load();
+    } catch {
+      setFlash({ ok: false, text: "Impossible de joindre le service de paiement." });
+    } finally { setSending(false); }
+  }
+
+  return h("div", { className: "max-w-[760px] mx-auto px-4 py-6" },
+    // En-tête
+    h("header", { className: "flex items-center gap-3 mb-6" },
+      h("div", { className: "w-10 h-10 rounded-xl bg-brand text-white grid place-items-center font-mono font-bold" }, "RA"),
+      h("div", null,
+        h("div", { className: "font-semibold text-lg leading-tight text-ink" }, "Banque RESILIENCE-ALPHA"),
+        h("div", { className: "text-slate text-[13px]" }, "Espace de paiement — démonstration")
+      ),
+      h("div", { className: "ml-auto text-[12px] font-mono " + (offline ? "text-ko" : "text-ok") },
+        offline ? "● hors ligne" : "● connecté")
+    ),
+
+    // Carte compte
+    acc && h("div", { className: "rounded-2xl p-6 mb-5 text-white shadow-lg",
+        style: { background: "linear-gradient(135deg, #1b5e8f, #2a9d8f)" } },
+      h("div", { className: "text-[13px] opacity-80" }, acc.holder),
+      h("div", { className: "font-mono text-[13px] opacity-80 mt-1" }, acc.iban),
+      h("div", { className: "text-[13px] opacity-80 mt-4" }, "Solde disponible"),
+      h("div", { className: "text-4xl font-bold font-mono tabular-nums mt-1" }, euro(acc.balance))
+    ),
+
+    // Message flash
+    flash && h("div", { className: "rounded-xl px-4 py-3 mb-5 text-sm font-medium " +
+        (flash.ok ? "bg-okbg text-ok" : "bg-kobg text-ko") }, flash.text),
+
+    // Formulaire
+    h("div", { className: "bg-white rounded-2xl p-5 shadow-sm border border-mist mb-5" },
+      h("h2", { className: "font-semibold mb-4 text-ink" }, "Nouveau paiement"),
+      h("form", { onSubmit: pay, className: "grid gap-4 sm:grid-cols-[1fr_1fr_auto] items-end" },
+        h("label", { className: "block" },
+          h("span", { className: "text-[12px] text-slate uppercase tracking-wide" }, "Montant (€)"),
+          h("input", {
+            id: "amount", type: "number", step: "0.01", min: "0.01", value: amount,
+            onChange: e => setAmount(e.target.value),
+            className: "mt-1 w-full rounded-lg border border-mist bg-white text-ink px-3 py-2 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-brand",
+          })
+        ),
+        h("label", { className: "block" },
+          h("span", { className: "text-[12px] text-slate uppercase tracking-wide" }, "Bénéficiaire"),
+          h("select", {
+            id: "benef", value: benef, onChange: e => setBenef(e.target.value),
+            className: "mt-1 w-full rounded-lg border border-mist bg-white text-ink px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand",
+          }, BENEF.map(b => h("option", { key: b, value: b }, b)))
+        ),
+        h("button", {
+          type: "submit", disabled: sending,
+          className: "rounded-lg bg-brand text-white font-medium px-5 py-2.5 hover:bg-ink transition disabled:opacity-50",
+        }, sending ? "Envoi…" : "Payer")
+      )
+    ),
+
+    // Historique
+    h("div", { className: "bg-white rounded-2xl p-5 shadow-sm border border-mist" },
+      h("h2", { className: "font-semibold mb-3 text-ink" }, "Dernières transactions"),
+      acc && acc.history.length
+        ? h("div", { className: "divide-y divide-mist" },
+            acc.history.map((t, i) =>
+              h("div", { key: i, className: "flex items-center gap-3 py-2.5" },
+                h("div", { className: "min-w-0" },
+                  h("div", { className: "font-medium truncate text-ink" }, t.beneficiary),
+                  t.txid && h("div", { className: "text-[11px] text-slate font-mono" }, "réf. " + t.txid)
+                ),
+                h("div", { className: "ml-auto font-mono tabular-nums text-ink" }, "-" + euro(t.amount)),
+                h("span", { className: "text-[11px] font-medium px-2 py-0.5 rounded-full " +
+                    (t.status === "réussie" ? "bg-okbg text-ok" : "bg-kobg text-ko") },
+                  t.status)
+              )
+            )
+          )
+        : h("div", { className: "text-slate text-sm py-3" }, "Aucune transaction pour l'instant.")
+    ),
+
+    h("p", { className: "text-center text-[11px] text-slate mt-5" },
+      "Démonstration — aucune donnée bancaire réelle. Les paiements sollicitent le service de paiement du SI RESILIENCE-ALPHA.")
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Provisioning Grafana — chargement automatique des dashboards (généré par Ansible)
+apiVersion: 1
+
+providers:
+  - name: RESILIENCE-ALPHA
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

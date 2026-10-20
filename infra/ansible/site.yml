@@ -1,0 +1,102 @@
+---
+# Playbook principal — RESILIENCE-ALPHA
+# Configure l'observabilité (Prometheus, Grafana, Loki) de façon reproductible,
+# puis (dés)active le déploiement de la plateforme via Docker Compose.
+#
+# Usage :
+#   ansible-playbook -i inventory.ini site.yml                 # configure tout
+#   ansible-playbook -i inventory.ini site.yml --tags config   # configs seulement
+#   ansible-playbook -i inventory.ini site.yml -e deploy=true  # configure + up
+
+- name: Configuration de l'observabilité RESILIENCE-ALPHA
+  hosts: hote
+  gather_facts: false
+
+  vars:
+    # Racine du dépôt (ce playbook est dans infra/ansible/)
+    repo_root: "{{ playbook_dir }}/../.."
+    infra_dir: "{{ repo_root }}/infra"
+    compose_dir: "{{ infra_dir }}/compose"
+    prometheus_scrape_interval: "5s"
+    grafana_admin_password: "admin"   # à surcharger : -e grafana_admin_password=...
+    deploy: false                     # true => lance docker compose up
+
+  tasks:
+    # --- Prometheus ------------------------------------------------------
+    - name: Créer le dossier de configuration Prometheus
+      ansible.builtin.file:
+        path: "{{ infra_dir }}/prometheus"
+        state: directory
+        mode: "0755"
+      tags: [config, prometheus]
+
+    - name: Générer prometheus.yml depuis le template
+      ansible.builtin.template:
+        src: templates/prometheus.yml.j2
+        dest: "{{ infra_dir }}/prometheus/prometheus.yml"
+        mode: "0644"
+      tags: [config, prometheus]
+
+    # --- Grafana (provisioning automatique) ------------------------------
+    - name: Créer les dossiers de provisioning Grafana
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ infra_dir }}/grafana/provisioning/datasources"
+        - "{{ infra_dir }}/grafana/provisioning/dashboards"
+        - "{{ infra_dir }}/grafana/dashboards"
+      tags: [config, grafana]
+
+    - name: Déclarer Prometheus comme source de données Grafana
+      ansible.builtin.copy:
+        src: files/grafana-datasource.yml
+        dest: "{{ infra_dir }}/grafana/provisioning/datasources/datasource.yml"
+        mode: "0644"
+      tags: [config, grafana]
+
+    - name: Déclarer le fournisseur de dashboards Grafana
+      ansible.builtin.copy:
+        src: files/grafana-dashboards.yml
+        dest: "{{ infra_dir }}/grafana/provisioning/dashboards/dashboards.yml"
+        mode: "0644"
+      tags: [config, grafana]
+
+    - name: Installer le dashboard RESILIENCE-ALPHA
+      ansible.builtin.copy:
+        src: files/grafana-dashboard-resilience.json
+        dest: "{{ infra_dir }}/grafana/dashboards/resilience.json"
+        mode: "0644"
+      tags: [config, grafana]
+
+    # --- Loki ------------------------------------------------------------
+    - name: Créer le dossier de configuration Loki
+      ansible.builtin.file:
+        path: "{{ infra_dir }}/loki"
+        state: directory
+        mode: "0755"
+      tags: [config, loki]
+
+    - name: Installer la configuration Loki
+      ansible.builtin.copy:
+        src: files/loki-config.yml
+        dest: "{{ infra_dir }}/loki/loki-config.yml"
+        mode: "0644"
+      tags: [config, loki]
+
+    # --- Déploiement optionnel ------------------------------------------
+    - name: Déployer la plateforme (docker compose up)
+      ansible.builtin.command:
+        cmd: docker compose up -d --build
+        chdir: "{{ compose_dir }}"
+      when: deploy | bool
+      tags: [deploy]
+
+    - name: Rappel
+      ansible.builtin.debug:
+        msg: >-
+          Configurations générées dans {{ infra_dir }}.
+          Pour appliquer : docker compose up -d dans {{ compose_dir }}
+          (ou relancer ce playbook avec -e deploy=true).
+      tags: [config]

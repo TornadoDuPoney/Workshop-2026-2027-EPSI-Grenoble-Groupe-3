@@ -67,6 +67,10 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - "3000:3000"
+    # Provisioning généré par Ansible (source de données + dashboard auto) :
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks: [obs]
     depends_on: [prometheus]
 
@@ -74,6 +78,9 @@ services:
     image: grafana/loki:3.1.1
     container_name: resilience-loki
     command: -config.file=/etc/loki/local-config.yaml
+    # Configuration générée par Ansible :
+    volumes:
+      - ../loki/loki-config.yml:/etc/loki/local-config.yaml:ro
     networks: [obs]
 
   dashboard:
@@ -86,6 +93,28 @@ services:
       - "8050:8000"      # interface de supervision : http://localhost:8050
     networks: [obs, back]
     depends_on: [prometheus, remediator]
+
+  frontend:
+    build: ../../services/frontend
+    container_name: resilience-frontend
+    environment:
+      API_URL: "http://api-paiement:8000"
+    ports:
+      - "8060:8000"      # site de paiement : http://localhost:8060
+    networks: [back]
+    depends_on: [api-paiement]
+
+  console:
+    build: ../../services/console
+    container_name: resilience-console
+    environment:
+      API_URL: "http://api-paiement:8000"
+      ATTACK_WORKERS: "80"
+      TRAFFIC_RPS: "10"
+    ports:
+      - "8070:8000"      # console de démo : http://localhost:8070
+    networks: [back]
+    depends_on: [api-paiement]
 
 networks:
   front: {}
