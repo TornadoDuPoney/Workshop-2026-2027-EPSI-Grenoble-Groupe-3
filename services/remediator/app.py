@@ -10,6 +10,7 @@ Docker pour pouvoir redémarrer des conteneurs. Il est donc isolé sur un
 réseau dédié et n'expose aucune interface d'administration ouverte.
 """
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -23,8 +24,47 @@ API_CONTAINER = os.getenv("API_CONTAINER", "resilience-api-paiement")
 WAF_CONTAINER = os.getenv("WAF_CONTAINER", "resilience-waf")
 BLOCK_SCRIPT = os.getenv("BLOCK_SCRIPT", "/scripts/block_attacker.sh")
 
+# LLM local (Ollama) — analyse d'incident. Optionnel : si indisponible,
+# la remédiation fonctionne quand même, l'analyse reste simplement vide.
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
 # Historique en mémoire des incidents traités (lu par le dashboard).
 HISTORY: list[dict] = []
+
+
+def generate_analysis(incident: dict) -> None:
+    """
+    Fait rédiger par le LLM LOCAL (Ollama) une courte analyse de l'incident,
+    puis la range dans incident['analysis']. Appel asynchrone : n'impacte pas
+    le temps de reprise. Tolérant aux pannes (LLM absent, lent, modèle manquant).
+    """
+    sig = incident.get("signal", {})
+    etapes = " ; ".join(s["action"] for s in incident.get("steps", []))
+    prompt = (
+        "Tu es analyste SOC. Rédige en 3 phrases maximum, en français, une analyse "
+        "d'un incident de cybersécurité sur une plateforme de paiement. "
+        "Indique la nature probable de l'incident, pourquoi la remédiation était "
+        "adaptée, et un point de vigilance. Ne donne que l'analyse, sans préambule.\n\n"
+        f"Métriques au déclenchement : débit={sig.get('rps')} req/s, "
+        f"latence p95={sig.get('latency_p95')} s, taux d'erreur={sig.get('error_rate')} /s.\n"
+        f"Actions automatiques exécutées : {etapes}.\n"
+        f"Reprise confirmée : {'oui' if incident.get('recovered') else 'non'}."
+    )
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+            timeout=120,
+        )
+        if r.status_code == 200:
+            incident["analysis"] = r.json().get("response", "").strip()
+            incident["analysis_by"] = f"LLM local ({OLLAMA_MODEL})"
+        else:
+            incident["analysis"] = None
+    except Exception as exc:
+        print(f"[remediator] analyse LLM indisponible: {exc}", flush=True)
+        incident["analysis"] = None
 
 
 def _docker_client():
@@ -116,7 +156,12 @@ def remediate(payload: dict):
     )
     incident["recovered"] = ok
     incident["recovered_at"] = _now()
+    incident["analysis"] = "Analyse en cours par le LLM local…"
 
     HISTORY.append(incident)
+    # L'analyse LLM tourne en arrière-plan : la réponse est renvoyée tout de
+    # suite, l'analyse viendra enrichir l'incident dès qu'elle est prête.
+    threading.Thread(target=generate_analysis, args=(incident,), daemon=True).start()
+
     print(f"[remediator] incident traité, recovered={ok}", flush=True)
     return incident

@@ -19,12 +19,23 @@ services:
       API_URL: "http://api-paiement:8000"
       API_CONTAINER: "resilience-api-paiement"
       WAF_CONTAINER: "resilience-waf"
+      OLLAMA_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "llama3.2:3b"
     # Accès au socket Docker = droits élevés : isolé sur le réseau back, pas de port exposé.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../waf/scripts:/scripts:ro
     networks: [back, obs]
-    depends_on: [api-paiement]
+    depends_on: [api-paiement, ollama]
+
+  ollama:
+    image: ollama/ollama:0.3.12
+    container_name: resilience-ollama
+    # LLM installé LOCALEMENT : aucun appel externe au moment de l'analyse.
+    # Le modèle est téléchargé une fois (voir README) puis persiste dans le volume.
+    volumes:
+      - ollama-models:/root/.ollama
+    networks: [back]
 
   detector:
     build: ../../services/detector
@@ -120,3 +131,6 @@ networks:
   front: {}
   back: {}
   obs: {}
+
+volumes:
+  ollama-models: {}

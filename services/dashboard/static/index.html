@@ -180,6 +180,11 @@ function App() {
                       ),
                       (inc.steps || []).map((st, j) =>
                         h("div", { key: j, className: "font-mono text-[12.5px] py-[3px] pl-3.5 relative before:content-['→'] before:absolute before:left-0 before:text-accent" }, st.action)
+                      ),
+                      inc.analysis && h("div", { className: "mt-2 rounded-lg bg-[#10212b] border border-line p-2.5" },
+                        h("div", { className: "font-mono text-[10px] uppercase tracking-wide text-accent mb-1" },
+                          "Analyse IA" + (inc.analysis_by ? " · " + inc.analysis_by : "")),
+                        h("div", { className: "text-[12.5px] leading-snug text-fg" }, inc.analysis)
                       )
                     ))
                 : h("div", { className: "font-mono text-[13px] text-muted py-2.5" }, "aucun incident — le système est sain")
