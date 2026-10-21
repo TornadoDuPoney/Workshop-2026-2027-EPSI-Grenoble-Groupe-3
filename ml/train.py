@@ -11,6 +11,7 @@ En l'absence de CSV réel, --synthetic génère un jeu sain plausible pour
 amorcer la démo. Remplacez-le par vos vraies métriques dès que possible.
 """
 import argparse
+import os
 import time
 
 import numpy as np
@@ -19,7 +20,6 @@ import requests
 from sklearn.ensemble import IsolationForest
 import joblib
 
-import os
 PROM_URL = os.getenv("PROM_URL", "http://localhost:9090")
 CSV = "metrics_normal.csv"
 MODEL = "detector_model.joblib"
@@ -54,22 +54,35 @@ def collect(points=180, interval=5):
     print(f"-> {CSV} écrit ({len(rows)} lignes)")
 
 
-def synthetic(n=500):
-    """Jeu sain synthétique pour amorcer la démo si pas encore de vraies données."""
+def synthetic(n=800):
+    """
+    Jeu de données SAIN représentatif.
+
+    Ce qui définit un service sain, ce n'est pas un débit précis mais une
+    latence basse et un taux d'erreur quasi nul — QUEL QUE SOIT le volume.
+    On couvre donc tout l'éventail sain : du repos (0 req/s) au pic légitime
+    (fort trafic, mais toujours rapide et sans erreur). Ainsi le modèle
+    n'alerte ni au repos ni lors d'une montée en charge normale, et ne
+    réagit qu'aux formes réellement anormales (latence et erreurs élevées).
+    """
     rng = np.random.default_rng(42)
     df = pd.DataFrame({
-        "rps": rng.normal(12, 2.5, n).clip(0),
-        "latency_p95": rng.normal(0.06, 0.015, n).clip(0.01),
-        "error_rate": rng.normal(0.0, 0.02, n).clip(0),
+        # du repos au pic légitime
+        "rps": rng.uniform(0, 180, n),
+        # toujours rapide, du cas idle (~0) à la charge normale (~0.12 s)
+        "latency_p95": rng.uniform(0.0, 0.12, n),
+        # service sain = quasi aucune erreur
+        "error_rate": rng.uniform(0.0, 0.05, n),
     })
     df.to_csv(CSV, index=False)
-    print(f"-> {CSV} synthétique écrit ({n} lignes)")
+    print(f"-> {CSV} synthétique écrit ({n} lignes, éventail sain complet)")
 
 
 def train():
     df = pd.read_csv(CSV)
+    # contamination basse : on n'attend presque aucune anomalie dans un jeu sain.
     model = IsolationForest(
-        n_estimators=150, contamination=0.02, random_state=42
+        n_estimators=200, contamination=0.005, random_state=42
     )
     model.fit(df[COLS])
     joblib.dump(model, MODEL)

@@ -26,9 +26,11 @@ REMEDIATOR_URL = os.getenv("REMEDIATOR_URL", "http://remediator:8000")
 LAT_WARN = float(os.getenv("LAT_WARN", "0.3"))
 ERR_WARN = float(os.getenv("ERR_WARN", "0.5"))
 
-Q_RPS = 'sum(rate(payments_total[30s]))'
-Q_LAT = 'histogram_quantile(0.95, sum(rate(payment_latency_seconds_bucket[30s])) by (le))'
-Q_ERR = 'sum(rate(payments_total{status="error"}[30s]))'
+# Fenêtre d'observation (alignée sur le detector).
+WINDOW = os.getenv("METRICS_WINDOW", "15s")
+Q_RPS = f'sum(rate(payments_total[{WINDOW}]))'
+Q_LAT = f'histogram_quantile(0.95, sum(rate(payment_latency_seconds_bucket[{WINDOW}])) by (le))'
+Q_ERR = f'sum(rate(payments_total{{status="error"}}[{WINDOW}]))'
 Q_SUCC = 'sum(payments_total{status="success"})'
 Q_ERRTOT = 'sum(payments_total{status="error"})'
 

@@ -28,6 +28,24 @@ const h = React.createElement;
 function App() {
   const [st, setSt] = useState({ attack: false, traffic: false });
   const [log, setLog] = useState([]);
+  const [question, setQuestion] = useState("Que faire en cas de DDoS ?");
+  const [answer, setAnswer] = useState(null);
+  const [asking, setAsking] = useState(false);
+
+  async function askAssistant(e) {
+    if (e) e.preventDefault();
+    if (!question.trim()) return;
+    setAsking(true); setAnswer(null);
+    try {
+      const r = await fetch("api/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      }).then(r => r.json());
+      setAnswer(r.answer || r.error || "Pas de réponse.");
+    } catch {
+      setAnswer("Assistant injoignable.");
+    } finally { setAsking(false); }
+  }
 
   async function refresh() {
     try { setSt(await fetch("api/status").then(r => r.json())); } catch {}
@@ -81,10 +99,11 @@ function App() {
     h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
       h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "2 · Attaque (déni de service)"),
       h("p", { className: "text-sm text-muted mb-4" }, "Flood HTTP sur l'API de paiement. Déclenche la détection puis la remédiation automatique."),
-      h("div", { className: "grid grid-cols-2 gap-3" },
+      h("div", { className: "grid grid-cols-2 gap-3 mb-3" },
         h(Btn, { onClick: () => call("api/attack/start"), tone: "crit" }, "⚡ Lancer l'attaque"),
         h(Btn, { onClick: () => call("api/attack/stop") }, "■ Arrêter l'attaque")
-      )
+      ),
+      h(Btn, { onClick: () => call("api/attack/burst") }, "⏱ Attaque courte (20 s, s'arrête seule)")
     ),
 
     // Test paiement
@@ -92,6 +111,25 @@ function App() {
       h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "3 · Vérifier le service"),
       h("p", { className: "text-sm text-muted mb-4" }, "Envoie une transaction unique pour vérifier l'état (avant, pendant, après l'incident)."),
       h(Btn, { onClick: () => call("api/test-payment") }, "✓ Envoyer une transaction de test")
+    ),
+
+    // Assistant RAG
+    h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
+      h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "4 · Assistant IA (RAG local)"),
+      h("p", { className: "text-sm text-muted mb-4" }, "Pose une question sur l'infrastructure : l'IA cherche dans la base de connaissances (Qdrant) et répond via le LLM local."),
+      h("form", { onSubmit: askAssistant, className: "flex gap-3 mb-3" },
+        h("input", {
+          type: "text", value: question, onChange: e => setQuestion(e.target.value),
+          placeholder: "Ex. que faire en cas de latence élevée ?",
+          className: "flex-1 min-w-0 rounded-lg bg-bg border border-line text-fg px-3 py-2.5 text-sm focus:outline-none focus:border-brand",
+        }),
+        h("button", {
+          type: "submit", disabled: asking,
+          className: "rounded-lg bg-brand text-[#06240f] font-medium px-5 py-2.5 text-sm hover:brightness-110 disabled:opacity-50 whitespace-nowrap",
+        }, asking ? "Recherche…" : "Demander")
+      ),
+      asking && h("div", { className: "text-muted text-sm font-mono" }, "L'assistant consulte la documentation (quelques secondes)…"),
+      answer && h("div", { className: "rounded-lg bg-bg border border-line p-4 text-[13.5px] leading-relaxed whitespace-pre-wrap text-fg" }, answer)
     ),
 
     // Journal
