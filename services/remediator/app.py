@@ -262,6 +262,13 @@ def history():
     return {"incidents": HISTORY}
 
 
+@app.post("/reset")
+def reset_history():
+    """Vide l'historique des incidents (réinitialise la timeline du dashboard)."""
+    HISTORY.clear()
+    return {"ok": True, "incidents": 0}
+
+
 @app.post("/ask")
 def ask(payload: dict):
     """

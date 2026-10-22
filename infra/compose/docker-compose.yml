@@ -130,11 +130,22 @@ services:
     container_name: resilience-console
     environment:
       API_URL: "http://api-paiement:8000"
+      TRAFFIC_GEN_URL: "http://traffic-gen:8000"
       REMEDIATOR_URL: "http://remediator:8000"
       ATTACK_WORKERS: "80"
-      TRAFFIC_RPS: "10"
     ports:
       - "8070:8000"      # console de démo : http://localhost:8070
+    networks: [back]
+    depends_on: [api-paiement, traffic-gen]
+
+  traffic-gen:
+    build: ../../services/traffic-gen
+    container_name: resilience-traffic-gen
+    # Générateur de trafic LÉGITIME : conteneur dédié = IP distincte de l'attaquant.
+    # La remédiation bloque l'attaquant sans couper ce trafic (retour en NOMINAL).
+    environment:
+      API_URL: "http://api-paiement:8000"
+      TRAFFIC_RPS: "10"
     networks: [back]
     depends_on: [api-paiement]
 

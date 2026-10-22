@@ -46,6 +46,16 @@
 const { useState, useEffect } = React;
 const h = React.createElement;
 
+// Scénarios d'attaque validés par la campagne de résilience (6/6).
+const PROFILS = [
+  { k: "flood",    nom: "Flood volumétrique",        sous: "120 workers · 18 s",            att: true },
+  { k: "burst",    nom: "Burst intense",             sous: "160 workers · 15 s",            att: true },
+  { k: "montee",   nom: "Montée progressive",        sous: "ramp 8 s → 140 workers · 24 s", att: true },
+  { k: "pression", nom: "Pression modérée soutenue", sous: "85 workers · 16 s",             att: true },
+  { k: "legitime", nom: "Charge légitime (contrôle)",sous: "15 workers espacés · 14 s",     att: false },
+  { k: "sonde",    nom: "Sonde discrète (contrôle)", sous: "3 workers espacés · 10 s",       att: false },
+];
+
 function App() {
   const [st, setSt] = useState({ attack: false, traffic: false });
   const [log, setLog] = useState([]);
@@ -80,6 +90,13 @@ function App() {
   async function call(path, label) {
     try { const r = await fetch(path, { method: "POST" }).then(r => r.json()); note(r.message || label); refresh(); }
     catch { note("Erreur : service console injoignable"); }
+  }
+  async function callBody(path, body, label) {
+    try {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body) }).then(r => r.json());
+      note(r.message || label); refresh();
+    } catch { note("Erreur : service console injoignable"); }
   }
 
   const Btn = ({ onClick, children, tone }) =>
@@ -120,11 +137,26 @@ function App() {
     h("div", { className: "bg-panel border border-line rounded-xl p-5 mb-4" },
       h("div", { className: "font-mono text-[12px] uppercase tracking-wide text-muted mb-1" }, "2 · Attaque (déni de service)"),
       h("p", { className: "text-sm text-muted mb-4" }, "Flood HTTP sur l'API de paiement. Déclenche la détection puis la remédiation automatique."),
-      h("div", { className: "grid grid-cols-2 gap-3 mb-3" },
-        h(Btn, { onClick: () => call("api/attack/start"), tone: "crit" }, "⚡ Lancer l'attaque"),
+      h("div", { className: "grid grid-cols-2 gap-3 mb-4" },
+        h(Btn, { onClick: () => call("api/attack/start"), tone: "crit" }, "⚡ Flood continu (manuel)"),
         h(Btn, { onClick: () => call("api/attack/stop") }, "■ Arrêter l'attaque")
       ),
-      h(Btn, { onClick: () => call("api/attack/burst") }, "⏱ Attaque courte (20 s, s'arrête seule)")
+      h("div", { className: "font-mono text-[11px] uppercase tracking-wide text-muted mb-2" },
+        "Scénarios validés (campagne 6/6) — s'arrêtent seuls"),
+      h("div", { className: "grid sm:grid-cols-2 gap-2.5" },
+        PROFILS.map((p, i) => h("button", {
+          key: i,
+          onClick: () => callBody("api/attack/launch", { profile: p.k }, p.nom),
+          className: "text-left rounded-lg px-4 py-2.5 border transition " + (
+            p.att ? "bg-critbg border-crit hover:brightness-125" : "bg-okbg border-ok hover:brightness-125"),
+        },
+          h("div", { className: "text-sm font-medium " + (p.att ? "text-crit" : "text-ok") }, (p.att ? "⚡ " : "✓ ") + p.nom),
+          h("div", { className: "text-[11px] text-muted font-mono mt-0.5" }, p.sous)
+        ))
+      ),
+      h("p", { className: "text-[11px] text-muted mt-3 mb-3" },
+        "Les deux « contrôles » (verts) sont des charges légitimes : ils ne doivent PAS déclencher la remédiation — preuve que le système ne surréagit pas."),
+      h(Btn, { onClick: () => call("api/reset") }, "↺ Réinitialiser (débloque les IP + vide la timeline)")
     ),
 
     // Test paiement
