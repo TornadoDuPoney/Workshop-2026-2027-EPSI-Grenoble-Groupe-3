@@ -9,8 +9,4 @@ datasources:
     isDefault: true
     editable: true
 
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    editable: true
+  # Les logs sont désormais centralisés par Wazuh (SIEM), plus par Loki.

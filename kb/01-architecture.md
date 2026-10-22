@@ -16,7 +16,10 @@ Docker Compose, avec une chaîne de cyber-résilience autonome.
   le bloque (WAF + API), redémarre le service, prouve la reprise par une
   transaction de contrôle. Rédige une analyse via le LLM local.
 - **waf** : pare-feu applicatif (ModSecurity/Nginx), point d'entrée exposé.
-- **prometheus / grafana / loki / promtail** : observabilité (métriques, dashboards, logs centralisés).
+- **prometheus / grafana** : observabilité (métriques temps réel, dashboards).
+- **wazuh** : SIEM/XDR (manager + indexer + dashboard). Centralise les logs,
+  surveille l'intégrité des fichiers (FIM), détecte les vulnérabilités, et
+  lève des alertes mappées MITRE ATT&CK sur les incidents de la plateforme.
 - **ollama** : LLM local (llama3.2:3b) pour l'analyse d'incident et l'assistant.
 - **qdrant** : base vectorielle pour la recherche documentaire (RAG).
 - **dashboard** : supervision temps réel (état, courbes, timeline de reprise).

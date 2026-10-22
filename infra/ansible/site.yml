@@ -1,7 +1,8 @@
 ---
 # Playbook principal — RESILIENCE-ALPHA
-# Configure l'observabilité (Prometheus, Grafana, Loki) de façon reproductible,
+# Configure l'observabilité (Prometheus, Grafana) de façon reproductible,
 # puis (dés)active le déploiement de la plateforme via Docker Compose.
+# La centralisation des logs / SIEM est assurée par Wazuh (voir infra/wazuh/).
 #
 # Usage :
 #   ansible-playbook -i inventory.ini site.yml                 # configure tout
@@ -69,21 +70,6 @@
         dest: "{{ infra_dir }}/grafana/dashboards/resilience.json"
         mode: "0644"
       tags: [config, grafana]
-
-    # --- Loki ------------------------------------------------------------
-    - name: Créer le dossier de configuration Loki
-      ansible.builtin.file:
-        path: "{{ infra_dir }}/loki"
-        state: directory
-        mode: "0755"
-      tags: [config, loki]
-
-    - name: Installer la configuration Loki
-      ansible.builtin.copy:
-        src: files/loki-config.yml
-        dest: "{{ infra_dir }}/loki/loki-config.yml"
-        mode: "0644"
-      tags: [config, loki]
 
     # --- Déploiement optionnel ------------------------------------------
     - name: Déployer la plateforme (docker compose up)

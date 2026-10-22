@@ -9,6 +9,7 @@ Point sensible (à justifier dans le dossier) : ce service a accès au socket
 Docker pour pouvoir redémarrer des conteneurs. Il est donc isolé sur un
 réseau dédié et n'expose aucune interface d'administration ouverte.
 """
+import json
 import os
 import re
 import threading
@@ -36,8 +37,33 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 KB_COLLECTION = os.getenv("KB_COLLECTION", "infra")
 
+# Journal d'événements de sécurité lu par le SIEM (Wazuh). Chaque ligne est un
+# JSON ; Wazuh la décode et lève une alerte mappée MITRE ATT&CK. Fichier partagé
+# avec le conteneur Wazuh via un montage de l'hôte (/var/log/resilience).
+SIEM_LOG = os.getenv("SIEM_LOG", "/var/log/resilience/security.log")
+
 # Historique en mémoire des incidents traités (lu par le dashboard).
 HISTORY: list[dict] = []
+
+
+def emit_siem(event: str, **fields) -> None:
+    """
+    Écrit un événement de sécurité structuré pour le SIEM (Wazuh).
+    Tolérant aux pannes : si le fichier n'est pas accessible, la remédiation
+    continue — le SIEM est un observateur, jamais un point de blocage.
+    """
+    record = {
+        "source": "resilience-alpha",
+        "event": event,
+        "ts": _now(),
+        **fields,
+    }
+    try:
+        os.makedirs(os.path.dirname(SIEM_LOG), exist_ok=True)
+        with open(SIEM_LOG, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as exc:
+        print(f"[remediator] SIEM indisponible: {exc}", flush=True)
 
 
 def _embed(text: str) -> list[float]:
@@ -281,6 +307,10 @@ def remediate(payload: dict):
         "attacker_ip": None,
     }
 
+    # 0. SIGNALER au SIEM (Wazuh) qu'une attaque vient d'être détectée.
+    emit_siem("attack_detected", attack_type=str(payload.get("type", "anomalie")),
+              signal=payload)
+
     # 1. IDENTIFIER l'attaquant par l'analyse des logs
     attacker_ip = identify_attacker_from_logs()
     incident["attacker_ip"] = attacker_ip
@@ -293,6 +323,8 @@ def remediate(payload: dict):
     # 2. Contenir l'attaque (blocage ciblé de l'IP identifiée)
     step = block_attacker(attacker_ip)
     incident["steps"].append({"t": _now(), "action": step})
+    if attacker_ip:
+        emit_siem("attacker_blocked", attacker_ip=attacker_ip)
 
     # 3. Rétablir le service
     step = restart_api()
@@ -312,6 +344,9 @@ def remediate(payload: dict):
     # L'analyse LLM tourne en arrière-plan : la réponse est renvoyée tout de
     # suite, l'analyse viendra enrichir l'incident dès qu'elle est prête.
     threading.Thread(target=generate_analysis, args=(incident,), daemon=True).start()
+
+    # Clôture : événement SIEM final (déclenche l'alerte de reprise dans Wazuh).
+    emit_siem("incident_remediated", attacker_ip=attacker_ip, recovered=bool(ok))
 
     print(f"[remediator] incident traité, recovered={ok}", flush=True)
     return incident

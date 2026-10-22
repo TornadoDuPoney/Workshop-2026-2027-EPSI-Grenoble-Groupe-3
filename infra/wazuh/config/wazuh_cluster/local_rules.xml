@@ -1,0 +1,64 @@
+<!--
+  Règles personnalisées — PROJECT RESILIENCE-ALPHA.
+
+  La plateforme de paiement (remediator) écrit un événement JSON dans
+  /var/log/resilience/security.log à chaque incident traité automatiquement.
+  Wazuh le décode (log_format json => champs dynamiques) et lève une alerte
+  mappée MITRE ATT&CK. C'est la preuve, côté SIEM, que la détection et la
+  remédiation autonomes ont bien eu lieu.
+
+  Niveaux Wazuh : 0 ignoré … 3 info … 7 moyen … 10 élevé … 12+ critique.
+  Les alertes de niveau >= 3 remontent dans le dashboard Wazuh.
+-->
+<group name="resilience_alpha,">
+
+  <!-- Événement générique de la plateforme (sert de parent). -->
+  <rule id="100010" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="source">resilience-alpha</field>
+    <description>RESILIENCE-ALPHA : événement de sécurité de la plateforme de paiement.</description>
+  </rule>
+
+  <!-- Attaque détectée : le detector (Isolation Forest) a signalé une anomalie. -->
+  <rule id="100011" level="10">
+    <if_sid>100010</if_sid>
+    <field name="event">attack_detected</field>
+    <description>RESILIENCE-ALPHA : attaque détectée automatiquement (type $(attack_type)).</description>
+    <mitre>
+      <id>T1498</id>
+    </mitre>
+  </rule>
+
+  <!-- Attaquant isolé + bloqué par le remediator. -->
+  <rule id="100012" level="12">
+    <if_sid>100010</if_sid>
+    <field name="event">attacker_blocked</field>
+    <description>RESILIENCE-ALPHA : attaquant $(attacker_ip) identifié dans les logs et bloqué.</description>
+    <mitre>
+      <id>T1498</id>
+    </mitre>
+  </rule>
+
+  <!-- Reprise prouvée : transaction de contrôle réussie après remédiation. -->
+  <rule id="100013" level="12">
+    <if_sid>100010</if_sid>
+    <field name="event">incident_remediated</field>
+    <field name="recovered">true</field>
+    <description>RESILIENCE-ALPHA : incident remédié SANS intervention humaine, service rétabli (attaquant $(attacker_ip)).</description>
+    <mitre>
+      <id>T1498</id>
+    </mitre>
+  </rule>
+
+  <!-- Remédiation terminée mais service NON rétabli : à investiguer. -->
+  <rule id="100014" level="12">
+    <if_sid>100010</if_sid>
+    <field name="event">incident_remediated</field>
+    <field name="recovered">false</field>
+    <description>RESILIENCE-ALPHA : incident traité mais reprise NON confirmée — investigation requise.</description>
+    <mitre>
+      <id>T1498</id>
+    </mitre>
+  </rule>
+
+</group>

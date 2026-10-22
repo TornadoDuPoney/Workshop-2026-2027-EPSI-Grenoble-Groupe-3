@@ -24,10 +24,13 @@ services:
       QDRANT_URL: "http://qdrant:6333"
       EMBED_MODEL: "nomic-embed-text"
       KB_COLLECTION: "infra"
+      SIEM_LOG: "/var/log/resilience/security.log"
     # Accès au socket Docker = droits élevés : isolé sur le réseau back, pas de port exposé.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../waf/scripts:/scripts:ro
+      # Journal de sécurité partagé avec le SIEM Wazuh (montage hôte).
+      - /var/log/resilience:/var/log/resilience
     networks: [back, obs]
     depends_on: [api-paiement, ollama, qdrant]
 
@@ -98,25 +101,8 @@ services:
     networks: [obs]
     depends_on: [prometheus]
 
-  loki:
-    image: grafana/loki:3.1.1
-    container_name: resilience-loki
-    command: -config.file=/etc/loki/local-config.yaml
-    # Configuration générée par Ansible :
-    volumes:
-      - ../loki/loki-config.yml:/etc/loki/local-config.yaml:ro
-    networks: [obs]
-
-  promtail:
-    image: grafana/promtail:3.1.1
-    container_name: resilience-promtail
-    # Collecte les logs de tous les conteneurs et les pousse vers Loki (SIEM).
-    command: -config.file=/etc/promtail/config.yml
-    volumes:
-      - ../promtail/promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks: [obs]
-    depends_on: [loki]
+  # NB : la collecte/centralisation des logs est désormais assurée par Wazuh
+  # (SIEM, voir infra/wazuh/). Loki et Promtail ont été retirés.
 
   dashboard:
     build: ../../services/dashboard
@@ -152,6 +138,34 @@ services:
     networks: [back]
     depends_on: [api-paiement]
 
+  face-reco:
+    build: ../../services/face-reco
+    container_name: resilience-face-reco
+    # IA de reconnaissance faciale sur le PC Hôte : accès à la caméra USB.
+    # /dev/video0 est le périphérique de la webcam branchée sur l'hôte.
+    devices:
+      - "/dev/video0:/dev/video0"
+    environment:
+      CAMERA_INDEX: "0"
+    volumes:
+      - face-data:/data
+    ports:
+      - "8091:8000"      # test : http://localhost:8091/camera
+    networks: [back]
+
+  backoffice:
+    build: ../../services/backoffice
+    container_name: resilience-backoffice
+    environment:
+      FACE_URL: "http://face-reco:8000"
+      LED_URL: ""        # ESP32 : à renseigner (ex. http://192.168.1.50) quand prêt
+    ports:
+      - "8090:8000"      # back-office sécurisé : http://localhost:8090
+    volumes:
+      - backoffice-data:/data
+    networks: [back]
+    depends_on: [face-reco]
+
 networks:
   front: {}
   back: {}
@@ -160,3 +174,5 @@ networks:
 volumes:
   ollama-models: {}
   qdrant-storage: {}
+  face-data: {}
+  backoffice-data: {}

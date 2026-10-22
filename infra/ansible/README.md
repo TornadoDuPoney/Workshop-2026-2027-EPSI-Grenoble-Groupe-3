@@ -1,15 +1,17 @@
 # Configuration de l'observabilité par Ansible — RESILIENCE-ALPHA
 
-Ce playbook génère de façon **reproductible** la configuration de Prometheus,
-Grafana et Loki. Objectif : un déploiement documenté et rejouable, pas de
-réglage manuel dans l'interface Grafana.
+Ce playbook génère de façon **reproductible** la configuration de Prometheus
+et Grafana. Objectif : un déploiement documenté et rejouable, pas de réglage
+manuel dans l'interface Grafana.
+
+La centralisation des logs et le SIEM sont assurés par **Wazuh** (voir
+`infra/wazuh/`), déployé par son propre script.
 
 ## Ce que fait le playbook
 
 - **Prometheus** : génère `infra/prometheus/prometheus.yml` (scrape de l'API).
 - **Grafana** : provisionne automatiquement la source de données Prometheus
   et un dashboard « RESILIENCE-ALPHA — Paiement » (débit, latence p95, erreurs).
-- **Loki** : installe une configuration mono-instance sur système de fichiers.
 
 ## Prérequis
 
@@ -35,9 +37,9 @@ ansible-playbook -i inventory.ini site.yml --tags grafana
 
 ## Après génération
 
-Pour que Grafana et Loki chargent ces fichiers, les montages correspondants
-doivent être présents dans `docker-compose.yml` (voir le bloc d'intégration
-fourni). Une fois en place :
+Pour que Grafana charge ces fichiers, les montages correspondants doivent être
+présents dans `docker-compose.yml` (voir le bloc d'intégration fourni). Une
+fois en place :
 
 ```bash
 cd ../compose

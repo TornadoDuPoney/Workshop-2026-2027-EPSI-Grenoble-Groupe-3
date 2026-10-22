@@ -6,5 +6,16 @@ secrets/*.txt
 node_modules/
 *.joblib
 metrics_normal.csv
-.venv/
+
+# Build PlatformIO (ESP32) — artefacts lourds, à ne jamais versionner
+.pio/
+iot/esp32-led/.pio/
+
+# Certificats TLS Wazuh — générés localement (clés privées), ne pas versionner
+infra/wazuh/config/wazuh_indexer_ssl_certs/
+
+# Données d'exécution (dans des volumes Docker, pas dans le dépôt)
+blocklist.json
+faceprints.json
+users.json
 docker-compose.override.yml

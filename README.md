@@ -60,6 +60,23 @@ curl http://localhost:8080/pay?amount=5      # repasse
 # (si le remediator est exposé en interne) curl http://<host>/history
 ```
 
+## SIEM — Wazuh
+
+La centralisation des logs et la détection de sécurité sont assurées par
+**Wazuh** (SIEM/XDR, `infra/wazuh/`), qui a remplacé Loki/Promtail. Il surveille
+l'hôte (FIM, vulnérabilités, SCA) et reçoit les événements de sécurité de la
+plateforme : à chaque incident, le remediator émet un événement JSON que Wazuh
+transforme en **alerte mappée MITRE ATT&CK** (avec l'IP de l'attaquant).
+
+```bash
+cd infra/wazuh
+chmod +x start-wazuh.sh
+./start-wazuh.sh
+# Interface : https://localhost:8443  (admin / SecretPassword)
+```
+
+Voir `infra/wazuh/README.md` pour le détail des règles et la démo de bout en bout.
+
 ## Points à défendre devant le jury
 
 - **Preuve de reprise** : le remediator finit toujours par une *transaction de
@@ -68,6 +85,9 @@ curl http://localhost:8080/pay?amount=5      # repasse
   réseau `back`, aucun port exposé, aucune interface d'admin ouverte.
 - **Détection ML** : Isolation Forest entraîné sur du trafic sain ; repli par
   seuils documenté pour la robustesse de la démo.
+- **SIEM Wazuh** : on distingue *observabilité* (Prometheus/Grafana) et *SIEM de
+  sécurité* (Wazuh : FIM, vulnérabilités, corrélation, MITRE ATT&CK). La boucle
+  autonome laisse une trace de sécurité horodatée et attribuée dans le SIEM.
 
 ## Sécurité des rendus
 

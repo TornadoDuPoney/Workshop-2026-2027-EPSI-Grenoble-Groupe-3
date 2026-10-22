@@ -1,4 +1,3 @@
-# Généré par Ansible — ne pas éditer à la main (voir infra/ansible/)
 global:
   scrape_interval: 5s
   evaluation_interval: 5s

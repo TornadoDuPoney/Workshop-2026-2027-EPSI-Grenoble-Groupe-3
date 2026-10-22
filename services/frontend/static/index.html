@@ -30,6 +30,27 @@
 </style>
 </head>
 <body class="font-sans text-ink">
+<!-- RESILIENCE-ALPHA : barre de navigation commune -->
+<style>
+  .ra-nav{position:sticky;top:0;z-index:99999;display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+    background:#0b1017;border-bottom:1px solid #223041;padding:8px 14px;
+    font-family:system-ui,-apple-system,sans-serif;font-size:13px}
+  .ra-nav .ra-brand{color:#8395a7;font-weight:700;letter-spacing:.05em;margin-right:6px;font-size:12px}
+  .ra-nav .ra-link{color:#cfe0ee;text-decoration:none;padding:5px 11px;border-radius:8px;
+    border:1px solid transparent;transition:.15s}
+  .ra-nav .ra-link:hover{border-color:#38b6d6;color:#fff}
+  .ra-nav .ra-link.active{background:#38b6d6;color:#06240f;font-weight:600}
+</style>
+<nav class="ra-nav">
+  <span class="ra-brand">RESILIENCE-ALPHA</span>
+  <a href="http://localhost:8060" class="ra-link active">Paiement</a>
+  <a href="http://localhost:8070" class="ra-link">Console</a>
+  <a href="http://localhost:8050" class="ra-link">Supervision</a>
+  <a href="http://localhost:8090" class="ra-link">Back-office</a>
+  <a href="http://localhost:3000" class="ra-link">Grafana</a>
+  <a href="https://localhost:8443" class="ra-link">Wazuh</a>
+</nav>
+
 <div id="root"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>

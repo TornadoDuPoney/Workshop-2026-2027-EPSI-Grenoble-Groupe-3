@@ -16,8 +16,8 @@
 
 1. Vérifier le débit : s'agit-il d'un pic légitime ou d'un flood ?
    Un pic légitime garde un taux d'erreur nul et des IP sources variées.
-2. Consulter les logs (Loki) pour repérer une IP dominante (signe d'attaque)
-   ou un message d'erreur de dépendance.
+2. Consulter les logs centralisés (SIEM Wazuh) pour repérer une IP dominante
+   (signe d'attaque) ou un message d'erreur de dépendance.
 3. Vérifier l'état des conteneurs (`docker compose ps`).
 
 ## Remédiation
